@@ -1,5 +1,5 @@
 ---
-title: "MS4S09 Coursework 1"
+title: "Data Mining and Analysis"
 author: "Prabhani Gunasekera"
 date: "1/28/2022"
 output:
