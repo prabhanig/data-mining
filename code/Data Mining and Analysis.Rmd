@@ -1,0 +1,433 @@
+---
+title: "MS4S09 Coursework 1"
+author: "Prabhani Gunasekera"
+date: "1/28/2022"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  pdf_document:
+    toc: yes
+    number_sections: yes
+---
+
+***Introduction***
+
+This data mining and analysis exercise was carried out for the COVID-19 misinformation data set, which had initially been compiled for a research project at the Centre for Machine Learning and Health at Carnegie Mellon University by Shahan Ali Memon and Kathleen M. Carley. It contains Twitter data of about 4000 tweets around misinformation related to coronavirus pandemic.The data set had 3 columns- status ID, text and annotation. The annotations had been added manually based on the categories identified by the researchers.
+
+***Task A - Text Mining***
+```{r}
+#install.packages("tm")
+#install.packages("textclean")
+#install.packages("textstem")
+#install.packages("SnowballC")
+#install.packages("wordcloud")
+#install.packages("RColorBrewer")
+#install.packages("ggplot2")
+```
+Initially, the text mining package 'tm' and other required functions such as, SnowballC, RColorBrewer and ggplot2 were installed. However, when knitting the document these lines of codes were commented as it gives an error otherwise.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The required libraries were called before compiling the codes.
+
+```{r}
+library(tm) #Text mining
+library(SnowballC) #Required for stemming
+library(textstem)
+library(RColorBrewer) #Required for color palettes
+library(ggplot2) #Required for plotting
+library(wordcloud) #Required to create the word cloud
+library(wordcloud2) #Required to create a shaped word cloud with better visualisation
+```
+
+At first, the provided COVID_19_Twitter_Misinformation csv dataset was read to the R environment and stored.
+```{r}
+# Read the csv file
+filePath <- "CMU-MisCOV19.csv"
+coviddata <- read.csv(filePath, header = TRUE)
+#coviddata
+```
+
+Next, it was required to clean this data set so that we remove any clutter that would distort the true picture of the data set content and thereby change the sentiments and information extracted from the data set. For this purpose we only require to clean the text column. Hence, initially only the text column was separately extracted.
+
+```{r}
+covidtw <- coviddata$text
+#covidtw
+```
+
+***1.1 Cleaning the Data***
+
+It was noted that there are foreign language characters. Hence, they are removed before loading the data as a corpus as it was easier to handle them in the normal character vector.
+```{r}
+#remove other characters than english letters
+covidtw <- stringr::str_replace_all(covidtw,"[^a-zA-Z0-9[:punct:]\\s']","")
+#covidtw
+
+```
+In the above code all other characters excluding simple and capital letters from A to Z, numbers from 0 to 9 and punctuation marks were removed from the text.
+
+Thereafter, the data were loaded as a corpus named "tweets" to carry out further data cleaning and analysis.
+
+```{r}
+tweets <- Corpus(VectorSource(covidtw))
+#inspect(tweets)
+```
+
+Using the inspect() function the first 1000 tweets were inspected to obtain an idea of the data set in terms of unwanted terms, phrases, word forms, punctuation, links etc. 
+
+Before carrying out further cleaning, a list of available transformations were obtained so that the relevant ones could be chosen.
+
+```{r}
+getTransformations()
+```
+Afterwards, a range of functions were used to clean the data.
+
+Firstly, the content_transformer function was used to remove unwanted twitter web links and new line character.
+```{r}
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))
+tweets <- tm_map(tweets, toSpace, "\\s?(f|ht)(tp)(s?)(://)([^\\.]*)[\\.|/](\\S*)")  
+tweets <- tm_map(tweets, toSpace, "\n")
+
+```
+Once the above were removed the text were transformed to lower case and numbers, punctuation, remaining special characters found, English stop words and extra white spaces present were removed. 
+Finally, lemmatisation was carried out to keep only the base form of the words. Here, lemmatizing was used instead of stemming as stemming tends to leave only the stem of the words which in certain instances removed the meaningful form of the word. At the end of cleaning exercise, the data were inspected again to check if the cleaning had been performed to a satisfactory level at a glance.
+```{r}
+# Convert the text to lower case
+tweets <- tm_map(tweets, content_transformer(tolower))
+ 
+# Remove numbers 
+tweets <- tm_map(tweets, removeNumbers)
+
+# Remove punctuations
+tweets <- tm_map(tweets, removePunctuation)
+
+removeSpecialChars <- function(x) gsub("[^a-zA-Z0-9 ]","",x)
+tweets <- tm_map(tweets, removeSpecialChars)
+
+# Remove english common stopwords
+tweets <- tm_map(tweets, removeWords, stopwords("english"))
+
+# Eliminate extra white spaces
+tweets <- tm_map(tweets, stripWhitespace)
+
+# Text stemming using lematisation
+tweets <- tm_map(tweets, textstem::lemmatize_strings)
+
+#inspect(tweets)
+
+```
+#1.2 Preliminary Knowledge Extraction and Visualisation
+
+A data-set of terms were obtained using the document-term matrix. The function TermDocumentMatrix() from text mining package was used as follows to transform the data into a data frame to carry out the analysis. Then, a data frame with frequency of each word sorted in the descending order was obtained so that a information can be extracted on the most frequent terms that appeared in the tweets.
+
+```{r}
+dtm <- TermDocumentMatrix(tweets)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+head(d, 10)
+```
+It was seen that "covid" and "coronavirus" were the most frequent terms. This is expected as the tweets were obviously about the virus. The appearance of "cure" suggests that most of these tweets could have had misinformation on a cure for the virus, and "bleach" appeared to be a highly discussed topic in this regard as well. An interesting finding is that "trump" appeared as the 7th highest frequent word. It could be that the tweets discussed the former president Trump's decisions or comments. Or maybe the word appeared in its actual meaning as well. To explore this further, other associated words with these frequent words were also checked. However, before going to that step the list of words that appeared more than 100 times and a plot of the most frequent 15 terms were explored to obtain a better picture of the frequency of the words.
+
+```{r}
+findFreqTerms(dtm, lowfreq = 100)
+```
+There were 83 words that had a frequency of more than 100 in the data set. Words such as, conspiracy and bioweapon seem to be related to one topic, whereas cure, garlic and hydroxychloroquine give the idea of another different topic that was discussed in tweets. At a glance, the above words indicate that the covid misinformation tweets carried a few main topics.
+
+For better illustration, the frequency of the first 15 frequent words were plotted and figure 1.1 below.
+
+```{r}
+par(mar=c(10,5,3,2))
+barplot(d[1:15,]$freq, las = 2, names.arg = d[1:15,]$word, 
+        col ="lightgreen", main ="Figure 1.2.1 - Most Frequent Words in the Tweets",
+        ylab = "Word frequencies")
+        
+```
+
+In addition to the previously seen top 10 words, it was seen that bioweapon and hydroxychloroquine were part of top 15 as well. This gives a faint idea about the frequency of the top most tweeted topics as well. Using the previously created document term matrix, the associations of the frequent terms were explored as follows. 
+
+As mentioned previously, it was interesting to find the association or the correlation of the frequent terms with other terms. For this findAssocs() function was used. 
+
+The below R code finds the words associated with "cure" in the tweets.
+
+```{r}
+findAssocs(dtm, terms = "cure", corlimit = 0.2)
+```
+It was seen that the 3rd most frequent word "cure" is only correlated with one word "hydroxychloroquine" and that is only a very weak positive association. This suggests that perhaps the tweets were discussing a possible cure but only a few tweets specifically discussed "hydroxychloroquine" in relation to a cure.
+
+Next the association with the term "bioweapon" was checked.
+
+```{r}
+findAssocs(dtm, terms = "bioweapon", corlimit = 0.2)
+```
+It was seen that China was weakly correlated with the term bioweapon indicating the presence of some tweets relating China with a bioweapon. However, bioweapon was separately discussed as well.
+
+```{r}
+findAssocs(dtm, terms = "bleach", corlimit = 0.2)
+```
+The above weak associations with the word 'bleach' suggested low presence of comments around drinking or injecting bleach related to coronavirus.
+
+Finally, as part of preliminary visualisations, word clouds were drawn depicting the significance of the words in the Twitter data set. 
+
+Figure 1.2.2 shows a basic word cloud drawn using wordcloud(). 
+```{r}
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(12, "Paired"))
+```
+                  Figure 1.2.2 - Word cloud of 200 most significant words
+
+A more prominent figure of word cloud(figure 1.2.3) in 'star' shape was drawn using wordcloud2(). 
+Reference: https://cran.r-project.org/web/packages/wordcloud2/wordcloud2.pdf
+
+```{r}
+wordcloud2(d,  size = 1, color = "random-light", backgroundColor = "grey", shape = 'star')
+```
+                               Figure 1.2.3 - Word cloud of the tweets
+
+```{r}
+library(knitr)
+#install.packages("tinytex")
+#tinytex::install_tinytex()
+```
+
+***Task B - Sensitivity Analysis***
+
+There were further packages that required to be installed to carry out sensitivity analysis.They are installed below. When knitting these were commented.
+
+```{r}
+#install.packages("tidytext")
+#install.packages("textdata")
+```
+
+The below libraries were loaded before carrying out the analysis.
+
+```{r}
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(tidyverse)
+library(ggplot2)
+library(tidyr)
+library(textdata)
+```
+
+Previously text mining had been carried out using a corpus. However, it was required to combine the cleaned text from before with the initial data set with annotations. Therefore, the corpus was converted to a dataframe and then combined with the original dataset as below.
+
+```{r}
+tweetsdf <- data.frame(cleanedtext = sapply(tweets, as.character), stringsAsFactors = FALSE) #converting corpus to dataframe
+covidtw2 <- cbind(coviddata,tweetsdf) #combined data set with cleaned text column
+```
+
+```{r}
+options(max.print = 100000)
+```
+
+Next, it was required to split the text into tokens, which in this case was words, so that sentiment analysis could be carried out.The below chunk of code performs the tokenisation.
+
+```{r}
+tweets_tokens <- covidtw2 %>% 
+  mutate(cleanedtext=as.character(covidtw2$cleanedtext)) %>%
+  unnest_tokens(word, cleanedtext)
+tweets_tokens
+```
+
+To obtain an overall idea about the frequency of the tokens/words, the count function was used. This gave the same output as before when the count was taken from document term matrix where covid and coronavirus were the first and second most frequent terms respectively.
+
+```{r}
+tweets_tokens %>%
+  count(word, sort = TRUE) 
+```
+
+In the previous section it was explored as to which list of words appeared more than 100 times. Here, it a horizontal bar chart of words which appeared more than 500 times was produced.As per below figure 2.1.0 the list comprised of words generally related to the pandemic except for 'bleach'. It indicated that out of the topics discussed in the tweets something related to bleach had been mostly tweeted about. 
+
+```{r}
+tweets_tokens %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 500) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n)) +
+  ggtitle('Figure 2.1.0 Words with Frequency Greater than 500') +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip()
+```
+
+Before the proper sentiment analysis was carried out, the sentiment lexicons in the tidyverse package were reviewed as follows.
+```{r}
+sentiments
+
+```
+While the sentiments were broadly classified as positive or negative the sentiment words could also be used in the analysis. 
+
+First, 'angry' words in the tweets were chosen to be explored. The below code identified the overall most common anger related words in the tweets.
+
+```{r}
+nrc_anger <- get_sentiments("nrc") %>% 
+  filter(sentiment == "anger")
+
+tweets_tokens %>%
+  inner_join(nrc_anger) %>%
+  count(word, sort = TRUE)
+```
+As per the output, it was seen that treat, death, lie, fight and disease topped the list in terms of frequency. 
+
+Since the data set had annotations, it was important to identify the most common anger words with respect to certain separate annotations. It was decided to check the anger words of 'Conspiracy' and 'Fake Cure' annotated tweets.
+
+The below code explored the anger words in 'Conspiracy' related tweets.
+
+```{r}
+nrc_anger <- get_sentiments("nrc") %>% 
+  filter(sentiment == "anger")
+
+tweets_tokens %>%
+  filter(annontation == "conspiracy") %>%
+  inner_join(nrc_anger) %>%
+  count(word, sort = TRUE)
+```
+
+With respect to 'Conspiracy', death and attack were the most frequent anger words.
+
+Next the most common anger words in 'fake cure' related tweets were explored.
+
+```{r}
+nrc_anger <- get_sentiments("nrc") %>% 
+  filter(sentiment == "anger")
+
+tweets_tokens %>%
+  filter(annontation == "fake cure") %>%
+  inner_join(nrc_anger) %>%
+  count(word, sort = TRUE)
+```
+As per the above output, there were no words with very high frequency. However, treat and demand were the most common.
+
+Thereafter, the overall positive and negative sentiments were analysed using the 'bing' lexicon.
+
+```{r}
+tweets_tokens %>%
+  inner_join(get_sentiments("bing")) %>% # pull out only sentiment words
+  count(sentiment) %>% # gets the counts of positive & negative words
+  spread(sentiment, n, fill = 0) %>% # make data wide rather than narrow
+  mutate(sentiment = positive - negative) 
+```
+It was seen that the overall sentiment of the tweets was negative as the negatives outweighed the positives.
+
+Next, it was attempted to compare the scores by annotations using Bing and NRC Emotion lexicon.
+```{r}
+bing_and_nrc <- bind_rows(tweets_tokens %>% 
+      inner_join(get_sentiments("bing")) %>%
+        mutate(method = "Bing et al."),
+  tweets_tokens %>% 
+      inner_join(get_sentiments("nrc") %>% 
+        filter(sentiment %in% c("positive", "negative"))) %>%
+        mutate(method = "NRC")) %>%
+            count(method, index = annontation, sentiment) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative)
+```
+In order to illustrate the results, a plot of the above output was produced using the below code. Figure 2.2.0 gives this plot.
+```{r}
+bing_and_nrc %>%
+  ggplot(aes(index, sentiment, fill = method)) +
+  geom_col(show.legend = FALSE) +
+  ggtitle('Figure 2..0 Positive and Negative Sentiments by Annotations - Bing Vs. NRC') +
+  theme(axis.text.x = element_text(angle=90, vjust=.5, hjust=1))+
+  facet_wrap(~method, ncol = 2, scales = "free_y")
+```
+***Task C - Topic Modelling***
+
+Initially, the required libraries were called.
+
+```{r}
+library(topicmodels)
+library(stats)
+library(reshape2)
+```
+The word counts by annotations were explored here.
+```{r}
+
+word_counts <- tweets_tokens %>%
+  anti_join(stop_words) %>%
+  count(annontation, word, sort = TRUE) %>%
+  ungroup()
+word_counts
+```
+
+Thereafter, the data set was added to a document term matrox using the below code.
+
+```{r}
+annontations_dtm <- word_counts %>%
+  cast_dtm(annontation, word, n)
+annontations_dtm
+```
+
+Next, the LDA model was run with 3 topics.
+```{r}
+annontations_lda <- LDA(annontations_dtm, k = 3, control = list(seed = 1234))
+annontations_lda
+```
+
+
+```{r}
+annontations_topics <- tidy(annontations_lda, matrix = "beta")
+annontations_topics
+
+```
+
+The top 5 terms in each of the 3 topics were analysed and listed using the below code.
+```{r}
+top_terms <- annontations_topics %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+top_terms
+```
+
+These were graphically represented by a plots as follows in figure 3.1.0.
+
+```{r}
+top_terms %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  ggtitle('Figure 3.1.0 Top 5 Words by Topics') +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() 
+```
+It showed clear separation in top terms amongst the different topics.
+
+```{r}
+annontations_gamma <- tidy(annontations_lda, matrix = "gamma")
+annontations_gamma
+```
+
+
+
+```{r}
+annontations_gamma <- annontations_gamma %>%
+  separate(document, "annontation", sep = "_", convert = TRUE)
+annontations_gamma
+```
+
+```{r}
+# reorder titles in order of topic 1, topic 2 and topic 3 before plotting
+annontations_gamma %>%
+  mutate(title = reorder(annontation, gamma * topic)) %>%
+  ggplot(aes(factor(topic), gamma)) +
+  geom_boxplot() +
+  facet_wrap(~ title)
+```
+
+
+```{r}
+annontation_classifications <- annontations_gamma %>%
+  group_by(annontation) %>%
+  top_n(1, gamma) %>%
+  ungroup()
+annontation_classifications
+```
+As per above output the annontations were separated to the 3 broad topics.
