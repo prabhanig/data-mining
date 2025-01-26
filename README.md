@@ -73,6 +73,12 @@ The `CMU-MisCOV19.csv` dataset is sourced from a study at Carnegie Mellon Univer
 
 ---
 
+## **References**
+- Memon, S. A., & Carley, K. M. (2020). Characterizing COVID-19 Misinformation Communities Using a Novel Twitter Dataset. *Proceedings of the 29th ACM International Conference on Information and Knowledge Management (CIKM)*. [Link to Arxiv](https://arxiv.org/abs/2008.00791)
+- COVID-19 Misinformation Annotation Codebook: Twitter. Carnegie Mellon University, School of Computer Science.
+
+---
+
 ## **License**
 The dataset and code are intended for academic and research purposes only. Please refer to the original dataset's terms for details.
 
